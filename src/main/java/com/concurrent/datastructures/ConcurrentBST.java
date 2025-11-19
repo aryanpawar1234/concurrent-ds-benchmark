@@ -38,20 +38,18 @@ public class ConcurrentBST implements ConcurrentSet {
                 return true;
             }
 
-            Node curr = root;
-            Node parent = null;
-
+            Node curr = root, parent = null;
             while (curr != null) {
                 parent = curr;
-                if (key == curr.key) return false;       // already in tree
+                if (key == curr.key) return false;
                 else if (key < curr.key) curr = curr.left;
                 else curr = curr.right;
             }
 
             if (key < parent.key) parent.left = new Node(key);
             else parent.right = new Node(key);
-
             return true;
+
         } finally {
             lock.unlock();
         }
@@ -61,33 +59,48 @@ public class ConcurrentBST implements ConcurrentSet {
     public boolean remove(int key) {
         lock.lock();
         try {
-            root = removeRec(root, key);
+            Node curr = root;
+            Node parent = null;
+
+            // search for key
+            while (curr != null && curr.key != key) {
+                parent = curr;
+                if (key < curr.key) curr = curr.left;
+                else curr = curr.right;
+            }
+
+            if (curr == null) return false;
+
+            // case 1: one child or zero
+            if (curr.left == null || curr.right == null) {
+                Node child = (curr.left != null) ? curr.left : curr.right;
+
+                if (parent == null) root = child;
+                else if (parent.left == curr) parent.left = child;
+                else parent.right = child;
+            }
+            else {
+                // case 2: two children → find inorder successor
+                Node succParent = curr;
+                Node succ = curr.right;
+
+                while (succ.left != null) {
+                    succParent = succ;
+                    succ = succ.left;
+                }
+
+                curr.key = succ.key; // copy successor key
+
+                if (succParent.left == succ)
+                    succParent.left = succ.right;
+                else
+                    succParent.right = succ.right;
+            }
+
             return true;
+
         } finally {
             lock.unlock();
         }
-    }
-
-    private Node removeRec(Node node, int key) {
-        if (node == null) return null;
-
-        if (key < node.key) {
-            node.left = removeRec(node.left, key);
-        } else if (key > node.key) {
-            node.right = removeRec(node.right, key);
-        } else {
-            // found node to delete
-            if (node.left == null) return node.right;
-            if (node.right == null) return node.left;
-
-            // two children → replace with inorder successor
-            Node succ = node.right;
-            while (succ.left != null) {
-                succ = succ.left;
-            }
-            node.key = succ.key;
-            node.right = removeRec(node.right, succ.key);
-        }
-        return node;
     }
 }
