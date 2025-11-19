@@ -43,7 +43,7 @@ public class ConcurrentBST implements ConcurrentSet {
 
             while (curr != null) {
                 parent = curr;
-                if (key == curr.key) return false;
+                if (key == curr.key) return false;       // already in tree
                 else if (key < curr.key) curr = curr.left;
                 else curr = curr.right;
             }
@@ -52,7 +52,6 @@ public class ConcurrentBST implements ConcurrentSet {
             else parent.right = new Node(key);
 
             return true;
-
         } finally {
             lock.unlock();
         }
@@ -74,23 +73,21 @@ public class ConcurrentBST implements ConcurrentSet {
 
         if (key < node.key) {
             node.left = removeRec(node.left, key);
-        }
-        else if (key > node.key) {
+        } else if (key > node.key) {
             node.right = removeRec(node.right, key);
-        }
-        else {
-            // found node
+        } else {
+            // found node to delete
             if (node.left == null) return node.right;
-            else if (node.right == null) return node.left;
+            if (node.right == null) return node.left;
 
             // two children → replace with inorder successor
             Node succ = node.right;
-            while (succ.left != null) succ = succ.left;
-
+            while (succ.left != null) {
+                succ = succ.left;
+            }
             node.key = succ.key;
             node.right = removeRec(node.right, succ.key);
         }
-
         return node;
     }
 }
