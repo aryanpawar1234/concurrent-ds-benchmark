@@ -52,7 +52,6 @@ public class Main {
                                     PREFILL_PERCENT,
                                     wl.containsPercent,
                                     wl.insertPercent,
-                                    wl.deletePercent,
                                     t,
                                     DURATION_SECONDS
                             );

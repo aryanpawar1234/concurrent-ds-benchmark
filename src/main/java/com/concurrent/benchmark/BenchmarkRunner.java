@@ -22,7 +22,7 @@ public class BenchmarkRunner {
             int prefillPercentage,
             int containsPercent,
             int insertPercent,
-            int deletePercent,
+          
             int numThreads,
             int durationSeconds
     ) {
@@ -31,7 +31,6 @@ public class BenchmarkRunner {
         this.prefillPercentage = prefillPercentage;
         this.containsPercent = containsPercent;
         this.insertPercent = insertPercent;
-        this.deletePercent = deletePercent;
         this.numThreads = numThreads;
         this.durationSeconds = durationSeconds;
     }
