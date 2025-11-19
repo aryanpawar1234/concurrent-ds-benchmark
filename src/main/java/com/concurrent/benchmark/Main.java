@@ -68,6 +68,6 @@ public class Main {
             }
         }
 
-        System.out.println("=== Benchmark Complete ===");
+        System.out.println("=== FULL BENCHMARK COMPLETE (225 runs, 1 run each) ===");
     }
 }
