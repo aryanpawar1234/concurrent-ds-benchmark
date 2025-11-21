@@ -14,6 +14,7 @@ public class CSVWriterUtil {
 
     public void writeHeader(String... columns) {
         writer.println(String.join(",", columns));
+        writer.flush();  // Flush after writing header
     }
 
     public void writeRow(Object... values) {
@@ -23,6 +24,7 @@ public class CSVWriterUtil {
             if (i < values.length - 1) sb.append(",");
         }
         writer.println(sb.toString());
+        writer.flush();  // Flush after writing each row
     }
 
     public void close() {
