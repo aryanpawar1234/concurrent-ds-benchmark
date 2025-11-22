@@ -2,105 +2,179 @@ package com.concurrent.datastructures;
 
 import java.util.concurrent.locks.ReentrantLock;
 
+/**
+ * Concurrent BST with fine-grained hand-over-hand (lock coupling) locking.
+ * Each node has its own lock, allowing multiple threads to operate on different parts of the tree.
+ */
 public class ConcurrentBST implements ConcurrentSet {
 
     private static class Node {
         int key;
-        Node left, right;
-        Node(int k) { key = k; }
+        volatile Node left, right;
+        final ReentrantLock lock = new ReentrantLock();
+
+        Node(int k) {
+            key = k;
+        }
+
+        void lock() { lock.lock(); }
+        void unlock() { lock.unlock(); }
     }
 
-    private Node root = null;
-    private final ReentrantLock lock = new ReentrantLock();
+    // Sentinel root node (never removed) - simplifies edge cases
+    private final Node root = new Node(Integer.MIN_VALUE);
 
     @Override
     public boolean contains(int key) {
-        lock.lock();
-        try {
-            Node curr = root;
-            while (curr != null) {
-                if (key == curr.key) return true;
-                else if (key < curr.key) curr = curr.left;
-                else curr = curr.right;
-            }
-            return false;
-        } finally {
-            lock.unlock();
+        // Optimistic read - no locking for contains (lock-free traversal)
+        Node curr = root.right;
+        while (curr != null) {
+            if (key == curr.key) return true;
+            else if (key < curr.key) curr = curr.left;
+            else curr = curr.right;
         }
+        return false;
     }
 
     @Override
     public boolean insert(int key) {
-        lock.lock();
+        Node parent = root;
+        parent.lock();
+        
         try {
-            if (root == null) {
-                root = new Node(key);
+            Node curr = root.right;
+            
+            // If tree is empty
+            if (curr == null) {
+                root.right = new Node(key);
                 return true;
             }
-
-            Node curr = root, parent = null;
-            while (curr != null) {
-                parent = curr;
-                if (key == curr.key) return false;
-                else if (key < curr.key) curr = curr.left;
-                else curr = curr.right;
+            
+            // Hand-over-hand locking down the tree
+            curr.lock();
+            try {
+                while (true) {
+                    if (key == curr.key) {
+                        return false; // Already exists
+                    } else if (key < curr.key) {
+                        if (curr.left == null) {
+                            curr.left = new Node(key);
+                            return true;
+                        }
+                        // Move down - lock child, unlock parent
+                        Node next = curr.left;
+                        next.lock();
+                        parent.unlock();
+                        parent = curr;
+                        curr = next;
+                    } else {
+                        if (curr.right == null) {
+                            curr.right = new Node(key);
+                            return true;
+                        }
+                        // Move down - lock child, unlock parent
+                        Node next = curr.right;
+                        next.lock();
+                        parent.unlock();
+                        parent = curr;
+                        curr = next;
+                    }
+                }
+            } finally {
+                curr.unlock();
             }
-
-            if (key < parent.key) parent.left = new Node(key);
-            else parent.right = new Node(key);
-            return true;
-
         } finally {
-            lock.unlock();
+            parent.unlock();
         }
     }
 
     @Override
     public boolean remove(int key) {
-        lock.lock();
+        Node grandparent = null;
+        Node parent = root;
+        parent.lock();
+        
         try {
-            Node curr = root;
-            Node parent = null;
-
-            // search for key
-            while (curr != null && curr.key != key) {
-                parent = curr;
-                if (key < curr.key) curr = curr.left;
-                else curr = curr.right;
-            }
-
+            Node curr = root.right;
             if (curr == null) return false;
-
-            // case 1: one child or zero
-            if (curr.left == null || curr.right == null) {
-                Node child = (curr.left != null) ? curr.left : curr.right;
-
-                if (parent == null) root = child;
-                else if (parent.left == curr) parent.left = child;
-                else parent.right = child;
-            }
-            else {
-                // case 2: two children → find inorder successor
+            
+            curr.lock();
+            try {
+                // Find node to delete with hand-over-hand locking
+                while (curr.key != key) {
+                    Node next;
+                    if (key < curr.key) {
+                        next = curr.left;
+                    } else {
+                        next = curr.right;
+                    }
+                    
+                    if (next == null) {
+                        return false; // Key not found
+                    }
+                    
+                    next.lock();
+                    if (grandparent != null) {
+                        grandparent.unlock();
+                    }
+                    grandparent = parent;
+                    parent = curr;
+                    curr = next;
+                }
+                
+                // Found the node - now delete it
+                // Case 1: No children or one child
+                if (curr.left == null || curr.right == null) {
+                    Node child = (curr.left != null) ? curr.left : curr.right;
+                    
+                    if (parent.left == curr) {
+                        parent.left = child;
+                    } else {
+                        parent.right = child;
+                    }
+                    return true;
+                }
+                
+                // Case 2: Two children - find inorder successor
                 Node succParent = curr;
                 Node succ = curr.right;
-
-                while (succ.left != null) {
-                    succParent = succ;
-                    succ = succ.left;
+                succ.lock();
+                
+                try {
+                    while (succ.left != null) {
+                        Node next = succ.left;
+                        next.lock();
+                        succParent.unlock();
+                        succParent = succ;
+                        succ = next;
+                    }
+                    
+                    // Copy successor's key to current node
+                    curr.key = succ.key;
+                    
+                    // Remove successor
+                    if (succParent == curr) {
+                        succParent.right = succ.right;
+                    } else {
+                        succParent.left = succ.right;
+                    }
+                    
+                    return true;
+                } finally {
+                    succ.unlock();
+                    if (succParent != curr) {
+                        succParent.unlock();
+                    }
                 }
-
-                curr.key = succ.key; // copy successor key
-
-                if (succParent.left == succ)
-                    succParent.left = succ.right;
-                else
-                    succParent.right = succ.right;
+                
+            } finally {
+                curr.unlock();
             }
-
-            return true;
-
         } finally {
-            lock.unlock();
+            parent.unlock();
+            if (grandparent != null) {
+                grandparent.unlock();
+            }
         }
     }
 }
